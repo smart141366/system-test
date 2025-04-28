@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>نظام إدارة المخزون - نموذج تجريبي (ضع اسم شركتك هنا)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* --- نفس التنسيقات السابقة --- */
+        body {
+            margin: 0;
+            font-family: 'Cairo', sans-serif;
+            background-color: #111;
+            color: #fff;
+        }
+        header {
+            background-color: #c00000;
+            padding: 1rem;
+            text-align: center;
+            font-size: 2rem;
+        }
+        nav {
+            background-color: #222;
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            padding: 1rem;
+        }
+        nav button {
+            background-color: #c00000;
+            color: white;
+            border: none;
+            padding: 0.7rem 1.5rem;
+            font-size: 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        nav button:hover {
+            background-color: #ff0000;
+        }
+        .container {
+            display: none;
+            padding: 2rem;
+        }
+        .active {
+            display: block;
+        }
+        form, .report {
+            background-color: #222;
+            padding: 2rem;
+            border-radius: 10px;
+            max-width: 700px;
+            margin: 2rem auto;
+        }
+        form input, form button, select {
+            width: 100%;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border: none;
+            border-radius: 5px;
+            background-color: #333;
+            color: white;
+            font-size: 1rem;
+        }
+        form button {
+            background-color: #c00000;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        form button:hover {
+            background-color: #ff0000;
+        }
+        table {
+            width: 100%;
+            margin-top: 2rem;
+            border-collapse: collapse;
+            background-color: #222;
+        }
+        th, td {
+            border: 1px solid #444;
+            padding: 1rem;
+            text-align: center;
+        }
+        .actions button {
+            margin: 0 5px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .edit-btn {
+            background-color: orange;
+            color: white;
+        }
+        .delete-btn {
+            background-color: red;
+            color: white;
+        }
+        .login-screen {
+            display: flex;
+            height: 100vh;
+            justify-content: center;
+            align-items: center;
+            background-color: #111;
+        }
+    </style>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+</head>
+<body>
+
+<div id="login" class="login-screen">
+    <form onsubmit="return loginUser()">
+        <h2>تسجيل الدخول</h2>
+        <input type="text" id="username" placeholder="اسم المستخدم" required>
+        <input type="password" id="password" placeholder="كلمة المرور" required>
+        <button type="submit">دخول</button>
+        <p id="login-error" style="color: red; display: none;">بيانات الدخول غير صحيحة</p>
+    </form>
+</div>
+
+<div id="app" style="display: none;">
+    <header>نظام إدارة المخزون - نموذج تجريبي (ضع اسم شركتك هنا)</header>
+    <nav>
+        <button onclick="showTab('dashboard')">لوحة التحكم</button>
+        <button onclick="showTab('products')">إدارة المنتجات</button>
+        <button onclick="showTab('addProduct')">إضافة منتج</button>
+        <button onclick="showTab('report')">تقارير المخزون</button>
+        <button onclick="logout()">تسجيل الخروج</button>
+    </nav>
+
+    <div id="dashboard" class="container active">
+        <h2>مرحبًا بك في لوحة التحكم</h2>
+        <p>اختر من القائمة لإدارة المخزون.</p>
+    </div>
+
+    <div id="products" class="container">
+        <h2>قائمة المنتجات</h2>
+        <table id="productsTable">
+            <thead>
+                <tr>
+                    <th>اسم المنتج</th>
+                    <th>الرصيد الابتدائي</th>
+                    <th>الوارد</th>
+                    <th>المنصرف</th>
+                    <th>الرصيد النهائي</th>
+                    <th>الإجراءات</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- البيانات تظهر هنا -->
+            </tbody>
+        </table>
+    </div>
+
+    <div id="addProduct" class="container">
+        <h2 id="formTitle">إضافة منتج</h2>
+        <form onsubmit="return saveProduct()">
+            <input type="hidden" id="editKey">
+            <input type="text" id="productName" placeholder="اسم المنتج" required>
+            <input type="number" id="initialStock" placeholder="الرصيد الابتدائي" required>
+            <input type="number" id="incomingStock" placeholder="الوارد">
+            <input type="number" id="outgoingStock" placeholder="المنصرف">
+            <button type="submit">حفظ</button>
+        </form>
+    </div>
+
+    <div id="report" class="container">
+        <h2>تقارير حركة المخزون</h2>
+        <div class="report" id="reportContent">
+            <p>لا توجد بيانات بعد.</p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // تهيئة فايربيس
+    const firebaseConfig = {
+        apiKey: "AIzaSyClEkbfIx4KWpCoBSSMZqtv5v-sMeXlskk",
+        authDomain: "test-system-cd889.firebaseapp.com",
+        projectId: "test-system-cd889",
+        storageBucket: "test-system-cd889.firebasestorage.app",
+        messagingSenderId: "149861182587",
+        appId: "1:149861182587:web:05f1fb13aabeda854446de",
+        measurementId: "G-96KWTFFCKV"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const USER = "admin";
+    const PASS = "1234";
+
+    function loginUser() {
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        if (username === USER && password === PASS) {
+            document.getElementById('login').style.display = "none";
+            document.getElementById('app').style.display = "block";
+            renderProducts();
+        } else {
+            document.getElementById('login-error').style.display = "block";
+        }
+        return false;
+    }
+
+    function showTab(tabId) {
+        document.querySelectorAll('.container').forEach(div => div.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        if (tabId === 'products') {
+            renderProducts();
+        }
+        if (tabId === 'report') {
+            generateReport();
+        }
+    }
+
+    function saveProduct() {
+        const name = document.getElementById('productName').value;
+        const initial = parseInt(document.getElementById('initialStock').value) || 0;
+        const incoming = parseInt(document.getElementById('incomingStock').value) || 0;
+        const outgoing = parseInt(document.getElementById('outgoingStock').value) || 0;
+        const finalStock = (initial + incoming) - outgoing;
+        const editKey = document.getElementById('editKey').value;
+
+        const product = { name, initial, incoming, outgoing, finalStock };
+
+        if (editKey === "") {
+            db.ref('products').push(product);
+            alert("تمت إضافة المنتج!");
+        } else {
+            db.ref('products/' + editKey).set(product);
+            alert("تم تعديل المنتج!");
+        }
+
+        clearForm();
+        showTab('products');
+        return false;
+    }
+
+    function renderProducts() {
+        const table = document.getElementById('productsTable').querySelector('tbody');
+        table.innerHTML = "";
+
+        db.ref('products').once('value', snapshot => {
+            snapshot.forEach(childSnapshot => {
+                const p = childSnapshot.val();
+                const key = childSnapshot.key;
+                const row = `
+                    <tr>
+                        <td>${p.name}</td>
+                        <td>${p.initial}</td>
+                        <td>${p.incoming}</td>
+                        <td>${p.outgoing}</td>
+                        <td>${p.finalStock}</td>
+                        <td class="actions">
+                            <button class="edit-btn" onclick="editProduct('${key}', ${JSON.stringify(p).replace(/"/g, '&quot;')})">تعديل</button>
+                            <button class="delete-btn" onclick="deleteProduct('${key}')">حذف</button>
+                        </td>
+                    </tr>
+                `;
+                table.innerHTML += row;
+            });
+        });
+    }
+
+    function editProduct(key, p) {
+        document.getElementById('productName').value = p.name;
+        document.getElementById('initialStock').value = p.initial;
+        document.getElementById('incomingStock').value = p.incoming;
+        document.getElementById('outgoingStock').value = p.outgoing;
+        document.getElementById('editKey').value = key;
+        document.getElementById('formTitle').innerText = "تعديل منتج";
+        showTab('addProduct');
+    }
+
+    function deleteProduct(key) {
+        if (confirm("هل أنت متأكد من حذف هذا المنتج؟")) {
+            db.ref('products/' + key).remove();
+            renderProducts();
+        }
+    }
+
+    function clearForm() {
+        document.getElementById('productName').value = "";
+        document.getElementById('initialStock').value = "";
+        document.getElementById('incomingStock').value = "";
+        document.getElementById('outgoingStock').value = "";
+        document.getElementById('editKey').value = "";
+        document.getElementById('formTitle').innerText = "إضافة منتج";
+    }
+
+    function generateReport() {
+        const report = document.getElementById('reportContent');
+        db.ref('products').once('value', snapshot => {
+            if (!snapshot.exists()) {
+                report.innerHTML = "<p>لا توجد منتجات لعرض التقرير.</p>";
+                return;
+            }
+            let reportHTML = "<table><tr><th>اسم المنتج</th><th>الرصيد النهائي</th></tr>";
+            snapshot.forEach(childSnapshot => {
+                const p = childSnapshot.val();
+                reportHTML += `<tr><td>${p.name}</td><td>${p.finalStock}</td></tr>`;
+            });
+            reportHTML += "</table>";
+            report.innerHTML = reportHTML;
+        });
+    }
+
+    function logout() {
+        if (confirm("هل تريد تسجيل الخروج؟")) {
+            location.reload();
+        }
+    }
+</script>
+
+</body>
+</html>
